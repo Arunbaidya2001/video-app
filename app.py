@@ -13,7 +13,6 @@ st.set_page_config(page_title="Video Structure Analyzer", page_icon="🎬")
 st.title("🎬 Video Structure Analyzer")
 st.markdown("Paste a video link (YouTube, Facebook, etc.). The AI will analyze its structure and generate a template.")
 
-# --- Load API Key securely ---
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 if not api_key:
     st.error("API Key not found. Please add GEMINI_API_KEY to Streamlit Secrets.")
@@ -22,7 +21,6 @@ if not api_key:
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- Load Whisper Model (Cached so it doesn't reload every time) ---
 @st.cache_resource
 def load_whisper():
     return whisper.load_model("base")
@@ -34,17 +32,24 @@ def analyze_video(url):
         with tempfile.TemporaryDirectory() as tmpdir:
             raw_text = ""
             
-            # 1. Try to get subtitles first (Fast)
-            ydl_opts_sub = {
+            # Added User-Agent to bypass 403 Forbidden errors
+            common_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+            }
+
+            # 1. Try to get subtitles
+            ydl_opts_sub = common_opts.copy()
+            ydl_opts_sub.update({
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': ['en', 'zh-Hans', 'zh', 'ja', 'ko'],
                 'subtitlesformat': 'vtt',
                 'skip_download': True,
                 'outtmpl': os.path.join(tmpdir, 'sub'),
-                'quiet': True,
-                'no_warnings': True,
-            }
+            })
             
             try:
                 with yt_dlp.YoutubeDL(ydl_opts_sub) as ydl:
@@ -56,19 +61,18 @@ def analyze_video(url):
                         for line in lines:
                             if '-->' not in line and line.strip() and not line.startswith('WEBVTT') and not line.strip().isdigit():
                                 raw_text += line.strip() + " "
-            except:
+            except Exception as e:
                 pass 
 
-            # 2. If no subtitles, download audio and use Whisper (Slow but works for all videos)
+            # 2. If no subtitles, download audio and use Whisper
             if len(raw_text) < 50:
                 st.info("No subtitles found. Downloading audio and transcribing with Whisper AI (this takes a moment)...")
-                ydl_opts_audio = {
+                ydl_opts_audio = common_opts.copy()
+                ydl_opts_audio.update({
                     'format': 'm4a/bestaudio/best',
                     'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}],
                     'outtmpl': os.path.join(tmpdir, 'audio'),
-                    'quiet': True,
-                    'no_warnings': True,
-                }
+                })
                 with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
                     ydl.extract_info(url, download=True)
                     audio_file = os.path.join(tmpdir, 'audio.mp3')
@@ -103,7 +107,6 @@ def analyze_video(url):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- Streamlit UI ---
 url_input = st.text_input("Video Link:", placeholder="https://www.youtube.com/watch?v=...")
 
 if st.button("Analyze Video", type="primary"):
