@@ -1,5 +1,5 @@
 streamlit
 yt-dlp
-google-generativeai
+google-genai
 openai-whisper
 torch
