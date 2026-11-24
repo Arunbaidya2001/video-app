@@ -1,11 +1,11 @@
 import streamlit as st
 import yt_dlp
-import google.generativeai as genai
 import os
 import tempfile
 import glob
 import whisper
 import warnings
+from google import genai
 
 warnings.filterwarnings("ignore")
 
@@ -18,8 +18,8 @@ if not api_key:
     st.error("API Key not found. Please add GEMINI_API_KEY to Streamlit Secrets.")
     st.stop()
 
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Using the new google-genai library
+client = genai.Client(api_key=api_key)
 
 @st.cache_resource
 def load_whisper():
@@ -32,12 +32,14 @@ def analyze_video(url):
         with tempfile.TemporaryDirectory() as tmpdir:
             raw_text = ""
             
-            # Added User-Agent to bypass 403 Forbidden errors
             common_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios', 'web_safari']
+                    }
+                }
             }
 
             # 1. Try to get subtitles
@@ -86,7 +88,7 @@ def analyze_video(url):
             if len(raw_text) < 50:
                 return "Error: Text too short. Check if the video has clear speech."
 
-            # 3. Send to Gemini
+            # 3. Send to Gemini using new library syntax
             prompt = f"""
             You are a professional video structure analyst. Analyze the transcript below and output a reusable "content creation template".
             Output language must match the video language.
@@ -101,7 +103,11 @@ def analyze_video(url):
             Transcript:
             {raw_text[:15000]}
             """
-            response = model.generate_content(prompt)
+            
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=prompt
+            )
             return response.text
 
     except Exception as e:
