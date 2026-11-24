@@ -18,7 +18,7 @@ if not api_key:
     st.error("API Key not found. Please add GEMINI_API_KEY to Streamlit Secrets.")
     st.stop()
 
-# Using the new google-genai library
+# Initialize the new GenAI client
 client = genai.Client(api_key=api_key)
 
 @st.cache_resource
@@ -32,17 +32,21 @@ def analyze_video(url):
         with tempfile.TemporaryDirectory() as tmpdir:
             raw_text = ""
             
+            # --- YOUTUBE / FACEBOOK BYPASS SETTINGS ---
             common_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'ios', 'web_safari']
+                        'player_client': ['ios', 'android', 'mweb', 'web_embedded'] 
                     }
+                },
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 }
             }
 
-            # 1. Try to get subtitles
+            # 1. Try to get subtitles first
             ydl_opts_sub = common_opts.copy()
             ydl_opts_sub.update({
                 'writesubtitles': True,
@@ -88,7 +92,7 @@ def analyze_video(url):
             if len(raw_text) < 50:
                 return "Error: Text too short. Check if the video has clear speech."
 
-            # 3. Send to Gemini using new library syntax
+            # 3. Send to Gemini (Using the model Google requested)
             prompt = f"""
             You are a professional video structure analyst. Analyze the transcript below and output a reusable "content creation template".
             Output language must match the video language.
